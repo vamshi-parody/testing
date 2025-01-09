@@ -1,4 +1,65 @@
----
+-
+- name: Power on VMs with uncertain extensions
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vm_base_names.yml  # Load base VM names from external file
+
+  vars:
+    vcenter_hostname: "your-vcenter-hostname"
+    vcenter_username: "your-username"
+    vcenter_password: "your-password"
+    datacenter_name: "your-datacenter-name"
+
+  tasks:
+    - name: Retrieve VM information from vCenter
+      community.vmware.vmware_vm_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+      register: vm_info
+
+    - name: Debug raw VM data structure
+      debug:
+        var: vm_info.virtual_machines
+
+    - name: Initialize matched_vms as an empty list
+      set_fact:
+        matched_vms: []
+
+    - name: Match VMs based on base names
+      set_fact:
+        matched_vms: "{{ matched_vms + [item.esxi_hostname] }}"
+      loop: "{{ vm_info.virtual_machines }}"
+      when: >
+        item.esxi_hostname is defined and
+        base_name in item.esxi_hostname for base_name in vm_base_names | list
+
+    - name: Debug matched VMs
+      debug:
+        var: matched_vms
+
+    - name: Power on matched VMs
+      community.vmware.vmware_guest_powerstate:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        name: "{{ item }}"
+        state: powered-on
+        state_change_timeout: 300
+      loop: "{{ matched_vms }}"
+      register: power_results
+
+    - name: Display power-on results
+      debug:
+        var: power_results
+
+
+
 - name: Power on VMs with uncertain extensions
   hosts: localhost
   gather_facts: no
