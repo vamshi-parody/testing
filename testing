@@ -1,0 +1,100 @@
+#!/bin/bash
+# Check dependencies
+for cmd in nc ping awk; do
+    if ! command -v $cmd &>/dev/null; then
+        echo "Error: $cmd is not installed"
+        exit 1
+    fi
+done
+
+# Input and output files
+input_file="input.csv"
+output_file="server_status.csv"
+
+# Check if input file exists
+if [[ ! -f "$input_file" ]]; then
+    echo "Error: Input file $input_file not found!"
+    exit 1
+fi
+
+# Function to check ping status
+check_ping() {
+    local ip=$1
+    ping -c 1 -W 2 "$ip" >/dev/null 2>&1
+    echo $([[ $? -eq 0 ]] && echo "1" || echo "0")
+}
+
+# Function to check port status
+check_port() {
+    local ip=$1
+    local port=$2
+    local result
+
+    result=$(nc -vz -w 3 "$ip" "$port" 2>&1)
+    if [ "$port" -eq 3389 ]; then
+        if [[ $result == *"refused"* ]] || [[ $result == *"succeeded"* ]]; then
+            echo "UP"
+        else
+            echo "DOWN"
+        fi
+    else
+        if [[ $result == *"succeeded"* ]] || [[ $result == *"Connected"* ]]; then
+            echo "UP"
+        else
+            echo "DOWN"
+        fi
+    fi
+}
+
+# Function to process the input CSV
+process_csv() {
+    # Backup the previous output file with a timestamp
+    if [[ -f "$output_file" ]]; then
+        timestamp=$(date '+%Y%m%d_%H%M%S')
+        backup_file="${output_file%.csv}_backup_$timestamp.csv"
+        cp "$output_file" "$backup_file"
+        echo "Backup saved: $backup_file"
+    fi
+
+    # Initialize the output CSV file with a header
+    echo "TimeStamp,ServerName,ServerStatus,ServerStatusCode,CMDBAppName,APMNumber,ApplicationName,RecoveryGroup,SubDivision,RTO" >"$output_file"
+
+    # Process the input CSV
+    awk -F',' 'NR > 1 { print $1 "," $2 "," $3 "," $4 "," $5 "," $6 "," $7 "," $8 "," $9 }' "$input_file" | while IFS=',' read -r servername serverip asserttype cmdbapp apm appname recgroup subdiv rto; do
+        # Timestamp for each entry
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+        # Ping status
+        ping_status=$(check_ping "$serverip")
+
+        # Port selection based on assert type
+        if [[ "${asserttype,,}" == *"linux"* ]]; then
+            port=22
+        elif [[ "${asserttype,,}" == *"windows"* ]]; then
+            port=3389
+        else
+            echo "Skipping $servername: Unknown AssertType $asserttype"
+            continue
+        fi
+
+        # Port status
+        service_status=$(check_port "$serverip" "$port")
+
+        # Append to the output CSV
+        echo "$timestamp,$servername,$service_status,$ping_status,$cmdbapp,$apm,$appname,$recgroup,$subdiv,$rto" >>"$output_file"
+    done
+
+    echo "Scan complete at $(date). Results saved to $output_file"
+}
+
+# Main loop to run every 5 minutes
+(
+    while true; do
+        echo "Starting a new scan at $(date)..."
+        process_csv
+        echo "Waiting for 5 minutes before the next run..."
+        sleep 300  # Wait for 5 minutes
+    done
+) &
+
+echo "Script is now running in the background. Process ID: $!"
