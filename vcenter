@@ -1,3 +1,14 @@
+- name: Retrieve specific VM information
+  community.vmware.vmware_vm_info:
+    hostname: "{{ vcenter_hostname }}"
+    username: "{{ vcenter_username }}"
+    password: "{{ vcenter_password }}"
+    validate_certs: no
+    datacenter: "{{ datacenter_name }}"
+    folder: "/path/to/vm-folder"  
+
+
+
 vm_base_names.yml
 
 vm_base_names:
