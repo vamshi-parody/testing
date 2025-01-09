@@ -1,0 +1,68 @@
+vm_base_names.yml
+
+vm_base_names:
+  - testingvm
+  - completevm
+  - partialvm
+
+
+---
+- name: Power on VMs with uncertain extensions
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vm_base_names.yml  # Load base VM names from external file
+
+  vars:
+    vcenter_hostname: "{{ vcenter_hostname }}"
+    vcenter_username: "{{ vcenter_username }}"
+    vcenter_password: "{{ vcenter_password }}"
+    datacenter_name: "{{ datacenter_name }}"
+
+  tasks:
+    - name: Retrieve VM information from vCenter
+      community.vmware.vmware_vm_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+      register: vm_info
+
+    - name: Find matching VMs for each base name
+      set_fact:
+        matched_vms: >-
+          {{
+            vm_base_names | map('extract_vm_names', vm_info.virtual_machines) | list | flatten
+          }}
+
+    - name: Display matched VMs
+      debug:
+        msg: "Matched VMs: {{ matched_vms }}"
+
+    - name: Power on matched VMs
+      community.vmware.vmware_guest_powerstate:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter_name }}"
+        name: "{{ item }}"
+        state: powered-on
+        state_change_timeout: 300
+      loop: "{{ matched_vms }}"
+      register: power_results
+
+    - name: Display power-on results
+      debug:
+        var: power_results
+
+  filters:
+    # Custom filter to extract VMs matching base names
+    extract_vm_names: >
+      def extract_vm_names(base_name, vm_list):
+          matched = []
+          for vm in vm_list:
+              if base_name in vm['name']:
+                  matched.append(vm['name'])
+          return matched
