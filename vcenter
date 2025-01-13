@@ -1,199 +1,24 @@
--
-- name: Power on VMs with uncertain extensions
-  hosts: localhost
-  gather_facts: no
-  vars_files:
-    - vm_base_names.yml  # Load base VM names from external file
-
-  vars:
-    vcenter_hostname: "your-vcenter-hostname"
-    vcenter_username: "your-username"
-    vcenter_password: "your-password"
-    datacenter_name: "your-datacenter-name"
-
-  tasks:
-    - name: Retrieve VM information from vCenter
-      community.vmware.vmware_vm_info:
-        hostname: "{{ vcenter_hostname }}"
-        username: "{{ vcenter_username }}"
-        password: "{{ vcenter_password }}"
-        validate_certs: no
-        datacenter: "{{ datacenter_name }}"
-      register: vm_info
-
-    - name: Debug raw VM data structure
-      debug:
-        var: vm_info.virtual_machines
-
-    - name: Initialize matched_vms as an empty list
-      set_fact:
-        matched_vms: []
-
-    - name: Match VMs based on base names
-      set_fact:
-        matched_vms: "{{ matched_vms + [item.esxi_hostname] }}"
-      loop: "{{ vm_info.virtual_machines }}"
-      when: >
-        item.esxi_hostname is defined and
-        base_name in item.esxi_hostname for base_name in vm_base_names | list
-
-    - name: Debug matched VMs
-      debug:
-        var: matched_vms
-
-    - name: Power on matched VMs
-      community.vmware.vmware_guest_powerstate:
-        hostname: "{{ vcenter_hostname }}"
-        username: "{{ vcenter_username }}"
-        password: "{{ vcenter_password }}"
-        validate_certs: no
-        datacenter: "{{ datacenter_name }}"
-        name: "{{ item }}"
-        state: powered-on
-        state_change_timeout: 300
-      loop: "{{ matched_vms }}"
-      register: power_results
-
-    - name: Display power-on results
-      debug:
-        var: power_results
-
-
-
-- name: Power on VMs with uncertain extensions
-  hosts: localhost
-  gather_facts: no
-  vars_files:
-    - vm_base_names.yml  # Load base VM names from external file
-
-  vars:
-    vcenter_hostname: "your-vcenter-hostname"
-    vcenter_username: "your-username"
-    vcenter_password: "your-password"
-    datacenter_name: "your-datacenter-name"
-
-  tasks:
-    - name: Retrieve VM information from vCenter
-      community.vmware.vmware_vm_info:
-        hostname: "{{ vcenter_hostname }}"
-        username: "{{ vcenter_username }}"
-        password: "{{ vcenter_password }}"
-        validate_certs: no
-        datacenter: "{{ datacenter_name }}"
-      register: vm_info
-
-    - name: Initialize matched_vms as an empty list
-      set_fact:
-        matched_vms: []
-    - name: Match VMs based on base names
-      set_fact:
-        matched_vms: "{{ matched_vms + [item.name] }}"
-      loop: "{{ vm_info.virtual_machines }}"
-      when: >
-        base_name in item.name for base_name in vm_base_names | list
-
-    - name: Display matched VMs
-      debug:
-        msg: "Matched VMs: {{ matched_vms }}"
-
-    - name: Power on matched VMs
-      community.vmware.vmware_guest_powerstate:
-        hostname: "{{ vcenter_hostname }}"
-        username: "{{ vcenter_username }}"
-        password: "{{ vcenter_password }}"
-        validate_certs: no
-        datacenter: "{{ datacenter_name }}"
-        name: "{{ item }}"
-        state: powered-on
-        state_change_timeout: 300
-      loop: "{{ matched_vms }}"
-      register: power_results
-
-    - name: Display power-on results
-      debug:
-        var: power_results
-
-
-
-
-
-
-name: Retrieve specific VM information
-  community.vmware.vmware_vm_info:
-    hostname: "{{ vcenter_hostname }}"
-    username: "{{ vcenter_username }}"
-    password: "{{ vcenter_password }}"
-    validate_certs: no
-    datacenter: "{{ datacenter_name }}"
-    folder: "/path/to/vm-folder"  
-
-
-
-vm_base_names.yml
-
-vm_base_names:
-  - testingvm
-  - completevm
-  - partialvm
-
-
 ---
-- name: Power on VMs with uncertain extensions
-  hosts: localhost
+- name: Read comma-separated hosts from a file and set vm_list
+  hosts: jump_server
   gather_facts: no
-  vars_files:
-    - vm_base_names.yml  # Load base VM names from external file
-
   vars:
-    vcenter_hostname: "{{ vcenter_hostname }}"
-    vcenter_username: "{{ vcenter_username }}"
-    vcenter_password: "{{ vcenter_password }}"
-    datacenter_name: "{{ datacenter_name }}"
+    file_path: "/path/to/your/file.txt"  # Update with the file path on the jump server
 
   tasks:
-    - name: Retrieve VM information from vCenter
-      community.vmware.vmware_vm_info:
-        hostname: "{{ vcenter_hostname }}"
-        username: "{{ vcenter_username }}"
-        password: "{{ vcenter_password }}"
-        validate_certs: no
-        datacenter: "{{ datacenter_name }}"
-      register: vm_info
+    - name: Read hostnames from file
+      command: cat "{{ file_path }}"
+      register: file_content
 
-    - name: Find matching VMs for each base name
+    - name: Set vm_list variable from file content
       set_fact:
-        matched_vms: >-
-          {{
-            vm_base_names | map('extract_vm_names', vm_info.virtual_machines) | list | flatten
-          }}
+        vm_list: "{{ file_content.stdout.split(',') | map('trim') | list }}"
 
-    - name: Display matched VMs
+    - name: Display the extracted vm_list
       debug:
-        msg: "Matched VMs: {{ matched_vms }}"
+        msg: "The VM list is: {{ vm_list }}"
 
-    - name: Power on matched VMs
-      community.vmware.vmware_guest_powerstate:
-        hostname: "{{ vcenter_hostname }}"
-        username: "{{ vcenter_username }}"
-        password: "{{ vcenter_password }}"
-        validate_certs: no
-        datacenter: "{{ datacenter_name }}"
-        name: "{{ item }}"
-        state: powered-on
-        state_change_timeout: 300
-      loop: "{{ matched_vms }}"
-      register: power_results
-
-    - name: Display power-on results
+    - name: Use vm_list in another task (example)
       debug:
-        var: power_results
-
-  filters:
-    # Custom filter to extract VMs matching base names
-    extract_vm_names: >
-      def extract_vm_names(base_name, vm_list):
-          matched = []
-          for vm in vm_list:
-              if base_name in vm['name']:
-                  matched.append(vm['name'])
-          return matched
+        msg: "Processing VM: {{ item }}"
+      loop: "{{ vm_list }}"
