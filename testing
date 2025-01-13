@@ -10,6 +10,7 @@ done
 # Input and output files
 input_file="input.csv"
 output_file="server_status.csv"
+offline_file="offline_hosts.csv"
 
 # Check if input file exists
 if [[ ! -f "$input_file" ]]; then
@@ -85,6 +86,10 @@ process_csv() {
     done
 
     echo "Scan complete at $(date). Results saved to $output_file"
+
+    # Filter out DOWN servers and save to offline_hosts.csv
+    awk -F',' 'NR > 1 && $3 == "DOWN" { print $2 }' "$output_file" | paste -sd ',' - > "$offline_file"
+    echo "Offline hosts saved to $offline_file"
 }
 
 # Main loop to run every 5 minutes
