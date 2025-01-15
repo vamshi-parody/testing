@@ -58,12 +58,12 @@ process_csv() {
         echo "Backup saved: $backup_file"
     fi
 
-    # Initialize the output CSV file with a header
+    # Initialize the output CSV file with the correct header
     echo "TimeStamp,ServerName,ServerStatus,ServerStatusCode,CMDBAppName,APMNumber,ApplicationName,RecoveryGroup,SubDivision,RTO" >"$output_file"
 
-    # Process the input CSV (including ApplicationName)
-    awk -F',' 'NR > 1 { print $1 "," $2 "," $3 "," $4 "," $5 "," $6 "," $7 "," $8 "," $9 "," $16 }' "$input_file" | \
-    while IFS=',' read -r servername serverip asserttype cmdbapp apm recgroup subdiv rto it_dept appname; do
+    # Process the input CSV with correct column mapping
+    awk -F',' 'NR > 1 { print $1 "," $2 "," $3 "," $4 "," $5 "," $6 "," $7 "," $8 "," $17 }' "$input_file" | \
+    while IFS=',' read -r servername serverip asserttype cmdbapp apm recgroup subdiv rto appname; do
         # Timestamp for each entry
         timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
@@ -83,7 +83,7 @@ process_csv() {
         # Port status
         service_status=$(check_port "$serverip" "$port")
 
-        # Append to the output CSV
+        # Append to the output CSV in the correct order
         echo "$timestamp,$servername,$service_status,$ping_status,$cmdbapp,$apm,$appname,$recgroup,$subdiv,$rto" >>"$output_file"
     done
 
@@ -105,3 +105,4 @@ process_csv() {
 ) &
 
 echo "Script is now running in the background. Process ID: $!"
+
