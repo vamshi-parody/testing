@@ -1,4 +1,4 @@
-- name: Validate ServiceNow Change Request and Change Task with Implement state and date logic
+- name: Validate ServiceNow Change Request and Change Task with Implement state and dynamic date
   hosts: localhost
   gather_facts: no
 
@@ -8,9 +8,20 @@
     servicenow_password: "your-password"  # Replace with your ServiceNow password
     change_request_number: "{{ survey_cr_number }}"  # CR number input from survey
     ctask_number: "CTASK3701290"  # Change Task number to validate
-    ansible_date: "{{ ansible_date_time.iso8601 }}"  # Current date from Ansible
 
   tasks:
+    - name: Get the current date
+      command: date +"%Y-%m-%dT%H:%M:%S"
+      register: current_date_result
+
+    - name: Assign the current date to a variable
+      set_fact:
+        current_date: "{{ current_date_result.stdout }}"
+
+    - name: Display the current date
+      debug:
+        msg: "Current date is {{ current_date }}"
+
     - name: Get Change Request details
       uri:
         url: "https://{{ servicenow_instance }}/api/now/table/change_request?sysparm_query=number={{ change_request_number }}"
@@ -42,8 +53,8 @@
 
     - name: Validate if current date is within Change Request date range
       fail:
-        msg: "The current date {{ ansible_date }} is not within the Change Request date range: {{ cr_start_date }} to {{ cr_end_date }}."
-      when: ansible_date < cr_start_date or ansible_date > cr_end_date
+        msg: "The current date {{ current_date }} is not within the Change Request date range: {{ cr_start_date }} to {{ cr_end_date }}."
+      when: current_date < cr_start_date or current_date > cr_end_date
 
     - name: Get Change Task details for the specific CTASK
       uri:
@@ -76,58 +87,9 @@
 
     - name: Validate if current date is within Change Task date range
       fail:
-        msg: "The current date {{ ansible_date }} is not within the Change Task date range: {{ ctask_start_date }} to {{ ctask_end_date }}."
-      when: ansible_date < ctask_start_date or ansible_date > ctask_end_date
+        msg: "The current date {{ current_date }} is not within the Change Task date range: {{ ctask_start_date }} to {{ ctask_end_date }}."
+      when: current_date < ctask_start_date or current_date > ctask_end_date
 
     - name: Notify if all validations pass
       debug:
-        msg: "The Change Request {{ change_request_number }} is valid and in 'Implement' state. The Change Task {{ ctask_number }} is valid, in 'Open' state, and the current date {{ ansible_date }} is within the valid date range."
-
-    # Initialize the output CSV file with the correct header
-    echo "TimeStamp,ServerName,ServerStatus,ServerStatusCode,CMDBAppName,APMNumber,ApplicationName,RecoveryGroup,SubDivision,RTO" >"$output_file"
-
-    # Process the input CSV with correct column mapping
-    awk -F',' 'NR > 1 { print $1 "," $2 "," $3 "," $4 "," $5 "," $6 "," $7 "," $8 "," $17 }' "$input_file" | \
-    while IFS=',' read -r servername serverip asserttype cmdbapp apm recgroup subdiv rto appname; do
-        # Timestamp for each entry
-        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-
-        # Ping status
-        ping_status=$(check_ping "$serverip")
-
-        # Port selection based on assert type
-        if [[ "${asserttype,,}" == *"linux"* ]]; then
-            port=22
-        elif [[ "${asserttype,,}" == *"windows"* ]]; then
-            port=3389
-        else
-            echo "Skipping $servername: Unknown AssertType $asserttype"
-            continue
-        fi
-
-        # Port status
-        service_status=$(check_port "$serverip" "$port")
-
-        # Append to the output CSV in the correct order
-        echo "$timestamp,$servername,$service_status,$ping_status,$cmdbapp,$apm,$appname,$recgroup,$subdiv,$rto" >>"$output_file"
-    done
-
-    echo "Scan complete at $(date). Results saved to $output_file"
-
-    # Filter out DOWN servers and save to offline_hosts.csv
-    awk -F',' 'NR > 1 && $3 == "DOWN" { print $2 }' "$output_file" | paste -sd ',' - > "$offline_file"
-    echo "Offline hosts saved to $offline_file"
-}
-
-# Main loop to run every 5 minutes
-(
-    while true; do
-        echo "Starting a new scan at $(date)..."
-        process_csv
-        echo "Waiting for 5 minutes before the next run..."
-        sleep 300  # Wait for 5 minutes
-    done
-) &
-
-echo "Script is now running in the background. Process ID: $!"
-
+        msg: "The Change Request {{ change_request_number }} is valid and in 'Implement' state. The Change Task {{ ctask_number }} is valid, in 'Open' state, and the current date {{ current_date }} is within the valid date range."
