@@ -1,4 +1,4 @@
-- name: Validate ServiceNow Change Request and Change Task with Implement state and dynamic date
+- name: Validate ServiceNow Change Request and Change Tasks
   hosts: localhost
   gather_facts: no
 
@@ -6,8 +6,8 @@
     servicenow_instance: "your-instance.service-now.com"  # Replace with your ServiceNow instance
     servicenow_username: "your-username"  # Replace with your ServiceNow username
     servicenow_password: "your-password"  # Replace with your ServiceNow password
-    change_request_number: "{{ survey_cr_number }}"  # CR number input from survey
-    ctask_number: "CTASK3701290"  # Change Task number to validate
+    change_request_number: "CHG2408545"  # Replace with your change request number
+    change_task_number: "CTASK3701290"  # Replace with your change task number
 
   tasks:
     - name: Get the current date
@@ -22,7 +22,7 @@
       debug:
         msg: "Current date is {{ current_date }}"
 
-    - name: Get Change Request details
+    - name: Get details of the Change Request
       uri:
         url: "https://{{ servicenow_instance }}/api/now/table/change_request?sysparm_query=number={{ change_request_number }}"
         method: GET
@@ -35,9 +35,9 @@
       register: cr_response
       no_log: true
 
-    - name: Fail if the Change Request number does not exist
+    - name: Fail if the Change Request does not exist
       fail:
-        msg: "The Change Request {{ change_request_number }} is invalid or does not exist."
+        msg: "The Change Request {{ change_request_number }} does not exist."
       when: cr_response.json.result | length == 0
 
     - name: Extract Change Request details
@@ -46,13 +46,63 @@
         cr_start_date: "{{ cr_response.json.result[0].planned_startdate }}"
         cr_end_date: "{{ cr_response.json.result[0].planned_enddate }}"
 
-    - name: Validate if Change Request is in 'Implement' state
+    - name: Validate if the Change Request is in 'New' state
       fail:
-        msg: "The Change Request {{ change_request_number }} is not in 'Implement' state. Current state: {{ cr_state }}."
-      when: cr_state != "implement"
+        msg: "The Change Request {{ change_request_number }} is not in 'New' state. Current state: {{ cr_state }}."
+      when: cr_state != "new"
 
-    - name: Validate if current date is within Change Request date range
+    - name: Validate if the current date is within the Change Request date range
       fail:
+        msg: "The current date {{ current_date }} is not within the Change Request date range: {{ cr_start_date }} to {{ cr_end_date }}."
+      when: current_date < cr_start_date or current_date > cr_end_date
+
+    - name: Get all Change Tasks under the Change Request
+      uri:
+        url: "https://{{ servicenow_instance }}/api/now/table/change_task?sysparm_query=change_request.number={{ change_request_number }}"
+        method: GET
+        user: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+        force_basic_auth: yes
+        return_content: yes
+        headers:
+          Accept: "application/json"
+      register: ctasks_response
+      no_log: true
+
+    - name: Fail if no Change Tasks are found for the Change Request
+      fail:
+        msg: "No Change Tasks found for Change Request {{ change_request_number }}."
+      when: ctasks_response.json.result | length == 0
+
+    - name: Extract the specific Change Task details
+      set_fact:
+        matched_task: "{{ ctasks_response.json.result | selectattr('number', 'equalto', change_task_number) | list }}"
+
+    - name: Fail if the specified Change Task does not exist
+      fail:
+        msg: "The Change Task {{ change_task_number }} does not exist under Change Request {{ change_request_number }}."
+      when: matched_task | length == 0
+
+    - name: Extract details of the matched Change Task
+      set_fact:
+        task_details: "{{ matched_task[0] }}"
+        task_short_description: "{{ matched_task[0].short_description }}"
+        task_expected_start: "{{ matched_task[0].expected_start }}"
+
+    - name: Validate if the Change Task has the short description 'Connectivity'
+      fail:
+        msg: "The Change Task {{ change_task_number }} does not have the short description 'Connectivity'. Found: {{ task_short_description }}"
+      when: task_short_description | lower != "connectivity"
+
+    - name: Validate if the Change Task implementation date matches the current date
+      fail:
+        msg: "The Change Task {{ change_task_number }} implementation date {{ task_expected_start }} does not match the current date {{ current_date }}."
+      when: task_expected_start.split('T')[0] != current_date.split('T')[0]
+
+    - name: Notify if all validations pass
+      debug:
+        msg: "The Change Request {{ change_request_number }} is valid, and the Change Task {{ change_task_number }} has the required properties. All validations passed."
+
         msg: "The current date {{ current_date }} is not within the Change Request date range: {{ cr_start_date }} to {{ cr_end_date }}."
       when: current_date < cr_start_date or current_date > cr_end_date
 
