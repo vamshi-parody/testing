@@ -1,62 +1,87 @@
-#!/bin/bash
+- name: Validate ServiceNow Change Request and Change Task with Implement state and date logic
+  hosts: localhost
+  gather_facts: no
 
-# Check dependencies
-for cmd in nc ping awk; do
-    if ! command -v $cmd &>/dev/null; then
-        echo "Error: $cmd is not installed"
-        exit 1
-    fi
-done
+  vars:
+    servicenow_instance: "your-instance.service-now.com"  # Replace with your ServiceNow instance
+    servicenow_username: "your-username"  # Replace with your ServiceNow username
+    servicenow_password: "your-password"  # Replace with your ServiceNow password
+    change_request_number: "{{ survey_cr_number }}"  # CR number input from survey
+    ctask_number: "CTASK3701290"  # Change Task number to validate
+    ansible_date: "{{ ansible_date_time.iso8601 }}"  # Current date from Ansible
 
-# Input and output files
-input_file="input.csv"
-output_file="server_status.csv"
-offline_file="offline_hosts.csv"
+  tasks:
+    - name: Get Change Request details
+      uri:
+        url: "https://{{ servicenow_instance }}/api/now/table/change_request?sysparm_query=number={{ change_request_number }}"
+        method: GET
+        user: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+        force_basic_auth: yes
+        return_content: yes
+        headers:
+          Accept: "application/json"
+      register: cr_response
+      no_log: true
 
-# Check if input file exists
-if [[ ! -f "$input_file" ]]; then
-    echo "Error: Input file $input_file not found!"
-    exit 1
-fi
+    - name: Fail if the Change Request number does not exist
+      fail:
+        msg: "The Change Request {{ change_request_number }} is invalid or does not exist."
+      when: cr_response.json.result | length == 0
 
-# Function to check ping status
-check_ping() {
-    local ip=$1
-    ping -c 1 -W 2 "$ip" >/dev/null 2>&1
-    echo $([[ $? -eq 0 ]] && echo "1" || echo "0")
-}
+    - name: Extract Change Request details
+      set_fact:
+        cr_state: "{{ cr_response.json.result[0].state | lower }}"
+        cr_start_date: "{{ cr_response.json.result[0].planned_startdate }}"
+        cr_end_date: "{{ cr_response.json.result[0].planned_enddate }}"
 
-# Function to check port status
-check_port() {
-    local ip=$1
-    local port=$2
-    local result
+    - name: Validate if Change Request is in 'Implement' state
+      fail:
+        msg: "The Change Request {{ change_request_number }} is not in 'Implement' state. Current state: {{ cr_state }}."
+      when: cr_state != "implement"
 
-    result=$(nc -vz -w 3 "$ip" "$port" 2>&1)
-    if [ "$port" -eq 3389 ]; then
-        if [[ $result == *"refused"* ]] || [[ $result == *"succeeded"* ]]; then
-            echo "UP"
-        else
-            echo "DOWN"
-        fi
-    else
-        if [[ $result == *"succeeded"* ]] || [[ $result == *"Connected"* ]]; then
-            echo "UP"
-        else
-            echo "DOWN"
-        fi
-    fi
-}
+    - name: Validate if current date is within Change Request date range
+      fail:
+        msg: "The current date {{ ansible_date }} is not within the Change Request date range: {{ cr_start_date }} to {{ cr_end_date }}."
+      when: ansible_date < cr_start_date or ansible_date > cr_end_date
 
-# Function to process the input CSV
-process_csv() {
-    # Backup the previous output file with a timestamp
-    if [[ -f "$output_file" ]]; then
-        timestamp=$(date '+%Y%m%d_%H%M%S')
-        backup_file="${output_file%.csv}_backup_$timestamp.csv"
-        cp "$output_file" "$backup_file"
-        echo "Backup saved: $backup_file"
-    fi
+    - name: Get Change Task details for the specific CTASK
+      uri:
+        url: "https://{{ servicenow_instance }}/api/now/table/change_task?sysparm_query=change_request.number={{ change_request_number }}^number={{ ctask_number }}"
+        method: GET
+        user: "{{ servicenow_username }}"
+        password: "{{ servicenow_password }}"
+        force_basic_auth: yes
+        return_content: yes
+        headers:
+          Accept: "application/json"
+      register: ctasks_response
+      no_log: true
+
+    - name: Fail if the specified Change Task does not exist
+      fail:
+        msg: "The Change Task {{ ctask_number }} does not exist for Change Request {{ change_request_number }}."
+      when: ctasks_response.json.result | length == 0
+
+    - name: Extract Change Task details
+      set_fact:
+        ctask_state: "{{ ctasks_response.json.result[0].state | lower }}"
+        ctask_start_date: "{{ ctasks_response.json.result[0].expected_start }}"
+        ctask_end_date: "{{ ctasks_response.json.result[0].expected_end | default(cr_end_date) }}"
+
+    - name: Validate if Change Task is in 'Open' state
+      fail:
+        msg: "The Change Task {{ ctask_number }} is not in an 'Open' state. Current state: {{ ctask_state }}."
+      when: ctask_state != "open"
+
+    - name: Validate if current date is within Change Task date range
+      fail:
+        msg: "The current date {{ ansible_date }} is not within the Change Task date range: {{ ctask_start_date }} to {{ ctask_end_date }}."
+      when: ansible_date < ctask_start_date or ansible_date > ctask_end_date
+
+    - name: Notify if all validations pass
+      debug:
+        msg: "The Change Request {{ change_request_number }} is valid and in 'Implement' state. The Change Task {{ ctask_number }} is valid, in 'Open' state, and the current date {{ ansible_date }} is within the valid date range."
 
     # Initialize the output CSV file with the correct header
     echo "TimeStamp,ServerName,ServerStatus,ServerStatusCode,CMDBAppName,APMNumber,ApplicationName,RecoveryGroup,SubDivision,RTO" >"$output_file"
