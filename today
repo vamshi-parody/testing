@@ -27,7 +27,19 @@
         group: name
         mode: '0755'
 
+    - name: Set splunk.sh as executable
+      file:
+        path: /home/name/splunk.sh
+        mode: '0755'
+
     - name: Execute splunk.sh
-      command: /home/name/splunk.sh
+      shell: ./splunk.sh
       args:
         chdir: /home/name/
+      environment:
+        PATH: "{{ ansible_env.PATH }}"
+      register: script_output
+
+    - name: Display script output
+      debug:
+        msg: "{{ script_output.stdout }}"
