@@ -1,23 +1,33 @@
-# Function to create a security group
-create_security_group() {
-    if openstack security group show "${SECURITY_GROUP_NAME}" &>/dev/null; then
-        echo -e "Security group ${SECURITY_GROUP_NAME} already exists. Skipping creation.\n" | tee -a "${LOG}"
-    else
-        echo -e "Creating security group ${SECURITY_GROUP_NAME}\n" | tee -a "${LOG}"
-        openstack security group create "${SECURITY_GROUP_NAME}" --description "${SECURITY_GROUP_DESC}" | tee -a "${LOG}"
+---
+- name: Copy files and execute script
+  hosts: target_host
+  become: yes
+  tasks:
+    - name: Ensure the /home/name/ directory exists
+      file:
+        path: /home/name/
+        state: directory
+        owner: name
+        group: name
+        mode: '0755'
 
-        echo -e "Adding ingress rules to the security group\n" | tee -a "${LOG}"
-        openstack security group rule create --proto tcp --dst-port 22 "${SECURITY_GROUP_NAME}" | tee -a "${LOG}"
-        openstack security group rule create --proto udp --dst-port 53 "${SECURITY_GROUP_NAME}" | tee -a "${LOG}"
-        openstack security group rule create --proto ipv6-icmp "${SECURITY_GROUP_NAME}" | tee -a "${LOG}"
-    fi
-}
-# Function to upload an OS image
-upload_os_image() {
-    if openstack image show "${IMAGE_NAME}" &>/dev/null; then
-        echo -e "Image ${IMAGE_NAME} already exists. Skipping upload.\n" | tee -a "${LOG}"
-    else
-        echo -e "Uploading OS image ${IMAGE_NAME}\n" | tee -a "${LOG}"
-        openstack image create "${IMAGE_NAME}" --file "${IMAGE_FILE}" --disk-format "${IMAGE_FORMAT}" --container-format bare | tee -a "${LOG}"
-    fi
-}
+    - name: Copy input.csv to /home/name/
+      copy:
+        src: input.csv
+        dest: /home/name/
+        owner: name
+        group: name
+        mode: '0644'
+
+    - name: Copy splunk.sh to /home/name/
+      copy:
+        src: splunk.sh
+        dest: /home/name/
+        owner: name
+        group: name
+        mode: '0755'
+
+    - name: Execute splunk.sh
+      command: /home/name/splunk.sh
+      args:
+        chdir: /home/name/
