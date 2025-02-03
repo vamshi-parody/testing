@@ -12,3 +12,12 @@ create_security_group() {
         openstack security group rule create --proto ipv6-icmp "${SECURITY_GROUP_NAME}" | tee -a "${LOG}"
     fi
 }
+# Function to upload an OS image
+upload_os_image() {
+    if openstack image show "${IMAGE_NAME}" &>/dev/null; then
+        echo -e "Image ${IMAGE_NAME} already exists. Skipping upload.\n" | tee -a "${LOG}"
+    else
+        echo -e "Uploading OS image ${IMAGE_NAME}\n" | tee -a "${LOG}"
+        openstack image create "${IMAGE_NAME}" --file "${IMAGE_FILE}" --disk-format "${IMAGE_FORMAT}" --container-format bare | tee -a "${LOG}"
+    fi
+}
