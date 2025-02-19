@@ -1,85 +1,45 @@
-#!/bin/bash
+---
+- name: Get VM uptime from vCenter and save to file
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Authenticate with vCenter
+      uri:
+        url: "https://{{ vcenter_hostname }}/rest/com/vmware/cis/session"
+        method: POST
+        user: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+      register: login_response
 
-# Input file
-INPUT_FILE="server_list.csv"
+    - name: Set session ID
+      set_fact:
+        session_id: "{{ login_response.json.value }}"
 
-# Output files
-STATUS_FILE="server_status.csv"
-OFFLINE_FILE="offline_servers.csv"
+    - name: Get VM details using REST API
+      uri:
+        url: "https://{{ vcenter_hostname }}/rest/vcenter/vm/{{ vm_id }}"
+        method: GET
+        headers:
+          vmware-api-session-id: "{{ session_id }}"
+        validate_certs: no
+      register: vm_details
 
-# Backup folder
-BACKUP_FOLDER="backup"
+    - name: Get VM runtime details
+      uri:
+        url: "https://{{ vcenter_hostname }}/rest/vcenter/vm/{{ vm_id }}/guest/power"
+        method: GET
+        headers:
+          vmware-api-session-id: "{{ session_id }}"
+        validate_certs: no
+      register: vm_runtime
 
-# Ensure the backup folder exists
-mkdir -p "$BACKUP_FOLDER"
+    - name: Extract uptime from VM runtime details
+      set_fact:
+        vm_uptime: "{{ vm_runtime.json.value.power_state }}"  # Replace with the correct path to uptime field if available
 
-# Function to perform checks
-perform_checks() {
-    local server_name="$1"
-    local ip="$2"
-    local asset_type="$3"
-
-    # Default values
-    local status="Online"
-    local status_code=0
-
-    # Perform ping check
-    if ! ping -c 1 -W 1 "$ip" &>/dev/null; then
-        status="Offline"
-        status_code=1
-    fi
-
-    # Perform nc check based on asset type
-    local port
-    if [ "$asset_type" == "Linux" ]; then
-        port=22
-    elif [ "$asset_type" == "Windows" ]; then
-        port=3389
-    else
-        port=0
-    fi
-
-    if [ "$port" -ne 0 ] && ! nc -z -w 1 "$ip" "$port" &>/dev/null; then
-        status="Offline"
-        status_code=1
-    fi
-
-    echo "$status,$status_code"
-}
-
-# Function to process the CSV
-process_csv() {
-    echo "[$(date)] Processing CSV file..."
-    {
-        read -r header # Skip header
-        echo "TimeStamp,ServerName,ServerStatus,ServerStatusCode,CMDBAppName,APMNumber,Application Service Name,RecoveryGroup,SubDivision,RTO" > "$STATUS_FILE"
-        echo "TimeStamp,ServerName,ServerStatus,ServerStatusCode" > "$OFFLINE_FILE"
-
-        while IFS=',' read -r server_name ip asset_type cmdb_app apm app_service recovery_group subdivision rto; do
-            timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-            check_result=$(perform_checks "$server_name" "$ip" "$asset_type")
-            status=$(echo "$check_result" | cut -d ',' -f 1)
-            status_code=$(echo "$check_result" | cut -d ',' -f 2)
-
-            echo "$timestamp,$server_name,$status,$status_code,$cmdb_app,$apm,$app_service,$recovery_group,$subdivision,$rto" >> "$STATUS_FILE"
-
-            if [ "$status" == "Offline" ]; then
-                echo "$timestamp,$server_name,$status,$status_code" >> "$OFFLINE_FILE"
-            fi
-        done
-    } < "$INPUT_FILE"
-
-    # Backup the output files
-    timestamp=$(date '+%Y%m%d_%H%M%S')
-    cp "$STATUS_FILE" "$BACKUP_FOLDER/server_status_$timestamp.csv"
-    cp "$OFFLINE_FILE" "$BACKUP_FOLDER/offline_servers_$timestamp.csv"
-
-    echo "[$(date)] Processing completed."
-}
-
-# Infinite loop to run every 5 minutes
-while true; do
-    process_csv
-    echo "[$(date)] Sleeping for 5 minutes..."
-    sleep 300 # 5 minutes
-done
+    - name: Save VM uptime to file
+      copy:
+        content: "{{ vm_uptime }}"
+        dest: "/path/to/output_file.txt"
