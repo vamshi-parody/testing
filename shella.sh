@@ -42,27 +42,31 @@ gpgkey=file://$REPO_DIR/RPM-GPG-KEY-redhat-release
 
 ssh $SSH_OPTS $ONLINE_SERVER "echo '$REPO_CONTENT' | sudo tee $REPO_DIR/local.repo"
 
-# Transfer from online server to jump server (if not already done)
-scp $SSH_OPTS -r $ONLINE_SERVER:$REPO_DIR /tmp/local-repo
+# Copy packages.txt to repo directory for reference
+scp $SSH_OPTS "$PKG_LIST_FILE" $ONLINE_SERVER:$REPO_DIR/
 
-# Transfer from jump server to target server
-scp $SSH_OPTS -r /tmp/local-repo $TARGET_SERVER:/home/testing/
+# Compress repo on online server
+ssh $SSH_OPTS $ONLINE_SERVER "tar -czvf $REPO_DIR.tar.gz -C $(dirname $REPO_DIR) $(basename $REPO_DIR)"
 
-# Install packages on target server (via SSH)
-# Dynamically build install command from package list
-INSTALL_CMD="sudo dnf install"
-for pkg in "${PACKAGES[@]}"; do
-    INSTALL_CMD+=" $pkg"
-done
-INSTALL_CMD+=" --refresh"
+# Transfer compressed repo to jump server
+scp $SSH_OPTS $ONLINE_SERVER:$REPO_DIR.tar.gz /tmp/
 
-ssh $SSH_OPTS $TARGET_SERVER << EOF
+# Transfer compressed repo to target server
+scp $SSH_OPTS /tmp/$(basename $REPO_DIR).tar.gz $TARGET_SERVER:/home/testing/
+
+# Decompress and setup repo on target server
+ssh $SSH_OPTS $TARGET_SERVER << 'EOF'
 sudo mkdir -p /opt/local-repo
-sudo mv /home/testing/local-repo/* /opt/local-repo/
+sudo tar -xzvf /home/testing/repo.tar.gz -C /opt/local-repo --strip-components=1
 sudo cp /opt/local-repo/local.repo /etc/yum.repos.d/
 sudo rpm --import /opt/local-repo/RPM-GPG-KEY-redhat-release
 sudo rpm --import /opt/local-repo/RPM-GPG-KEY-EPEL-9
 sudo dnf clean all
 sudo dnf makecache
-$INSTALL_CMD
+# sudo dnf install $(tr '\n' ' ' < /opt/local-repo/packages.txt) --refresh
 EOF
+
+# Print manual install command
+echo
+echo "# To install packages on the target server, run:"
+echo "# sudo dnf install \$(tr '\n' ' ' < /opt/local-repo/packages.txt) --refresh"
