@@ -1,45 +1,68 @@
----
-- name: Copy files and execute script
-  hosts: target_host
-  become: yes
-  tasks:
-    - name: Ensure the /home/name/ directory exists
-      file:
-        path: /home/name/
-        state: directory
-        owner: name
-        group: name
-        mode: '0755'
+#!/bin/bash
 
-    - name: Copy input.csv to /home/name/
-      copy:
-        src: input.csv
-        dest: /home/name/
-        owner: name
-        group: name
-        mode: '0644'
+VM_LIST="vm_list.txt"
+REPORT_FILE="all_vm_reports.txt"
+MONITOR_SCRIPT='/tmp/vm_monitor_temp.sh'
 
-    - name: Copy splunk.sh to /home/name/
-      copy:
-        src: splunk.sh
-        dest: /home/name/
-        owner: name
-        group: name
-        mode: '0755'
+# The monitoring script to run on each VM (as a HEREDOC for portability)
+read -r -d '' REMOTE_SCRIPT <<'EOF'
+echo "===== VM Quick Health Summary ====="
+echo "VM: $(hostname)"
+echo "Date: $(date)"
+echo
 
-    - name: Set splunk.sh as executable
-      file:
-        path: /home/name/splunk.sh
-        mode: '0755'
+# CPU Usage Percentage (user + system)
+cpu_line=$(top -b -n1 | grep "%Cpu")
+cpu_user=$(echo "$cpu_line" | awk -F',' '{print $1}' | awk '{print $2}')
+cpu_sys=$(echo "$cpu_line" | awk -F',' '{print $2}' | awk '{print $1}')
+cpu_usage=$(awk "BEGIN {print $cpu_user + $cpu_sys}")
+echo "CPU Usage: $cpu_usage%"
 
-    - name: Execute splunk.sh
-      shell: ./splunk.sh
-      args:
-        chdir: /home/name/
-      environment:
-        PATH: "{{ ansible_env.PATH }}"
-      register: script_output
+# Memory Usage Percentage
+mem_line=$(top -b -n1 | grep "KiB Mem\\|MiB Mem\\|GiB Mem\\|Mem :")
+if [[ -z "$mem_line" ]]; then
+    mem_line=$(top -b -n1 | grep "Mem :")
+fi
+total_mem=$(echo "$mem_line" | awk '{print $4}')
+used_mem=$(echo "$mem_line" | awk '{print $8}')
+if [[ -z "$total_mem" || -z "$used_mem" ]]; then
+    total_mem=$(echo "$mem_line" | awk '{print $2}')
+    used_mem=$(echo "$mem_line" | awk '{print $4}')
+fi
+mem_percent=$(awk "BEGIN {if ($total_mem > 0) print ($used_mem/$total_mem)*100; else print 0}")
+printf "Memory Usage: %.1f%%\n" "$mem_percent"
 
-    - name: Display script output
-      debug:
-        msg: "{{ script_output.stdout }}"
+# Disk Usage Percentage for each filesystem
+echo "Disk Usage:"
+df -H | grep -vE '^Filesystem|tmpfs|cdrom|loop|udev' | awk '{ print $5, $6 }'
+echo
+
+# Connections and Event Counts
+cd /data1/cnpd_output 2>/dev/null || { echo "Log directory not found!"; exit 1; }
+latest_log=$(ls -1t *.0 2>/dev/null | head -1)
+if [ -z "$latest_log" ]; then
+    echo "No *.0 log files found."
+else
+    block=$(grep -A40 "Connections" "$latest_log" | tail -n 41)
+    connections=$(echo "$block" | grep "Connections" | tail -1 | awk '{print $4}')
+    discarded=$(echo "$block" | grep "Discarded events" | awk '{print $4}')
+    out_of_sync=$(echo "$block" | grep "Out-of-sync events" | awk '{print $4}')
+    echo "Connections: ${connections:-N/A}"
+    echo "Discarded events: ${discarded:-N/A}"
+    echo "Out-of-sync events: ${out_of_sync:-N/A}"
+fi
+
+echo "===== End of Summary ====="
+EOF
+
+# Clear previous report
+echo "" > "$REPORT_FILE"
+
+# Loop through each VM
+while read -r VM; do
+    echo "Collecting report from $VM ..."
+    ssh -o BatchMode=yes -o ConnectTimeout=5 "$VM" "bash -s" <<< "$REMOTE_SCRIPT" >> "$REPORT_FILE" 2>&1
+    echo -e "\n" >> "$REPORT_FILE"
+done < "$VM_LIST"
+
+echo "All reports collected in $REPORT_FILE"
