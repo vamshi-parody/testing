@@ -1,45 +1,118 @@
----
-- name: Get VM uptime from vCenter and save to file
-  hosts: localhost
-  gather_facts: no
-  tasks:
-    - name: Authenticate with vCenter
-      uri:
-        url: "https://{{ vcenter_hostname }}/rest/com/vmware/cis/session"
-        method: POST
-        user: "{{ vcenter_username }}"
-        password: "{{ vcenter_password }}"
-        force_basic_auth: yes
-        validate_certs: no
-      register: login_response
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.gridspec import GridSpec
+import numpy as np
 
-    - name: Set session ID
-      set_fact:
-        session_id: "{{ login_response.json.value }}"
+# ============================================
+# CONFIGURATION: Set your server name here
+# ============================================
+SERVER_NAME = "PROD-SERVER-01"  # Change this to your server name
+# ============================================
 
-    - name: Get VM details using REST API
-      uri:
-        url: "https://{{ vcenter_hostname }}/rest/vcenter/vm/{{ vm_id }}"
-        method: GET
-        headers:
-          vmware-api-session-id: "{{ session_id }}"
-        validate_certs: no
-      register: vm_details
+# Read your CSV file
+df = pd.read_csv('your_data.csv')
 
-    - name: Get VM runtime details
-      uri:
-        url: "https://{{ vcenter_hostname }}/rest/vcenter/vm/{{ vm_id }}/guest/power"
-        method: GET
-        headers:
-          vmware-api-session-id: "{{ session_id }}"
-        validate_certs: no
-      register: vm_runtime
+# Convert date to datetime if needed
+df['Date'] = pd.to_datetime(df['Date'])
 
-    - name: Extract uptime from VM runtime details
-      set_fact:
-        vm_uptime: "{{ vm_runtime.json.value.power_state }}"  # Replace with the correct path to uptime field if available
+# Set style
+sns.set_style("whitegrid")
+plt.rcParams['figure.facecolor'] = 'white'
 
-    - name: Save VM uptime to file
-      copy:
-        content: "{{ vm_uptime }}"
-        dest: "/path/to/output_file.txt"
+# Create figure with custom layout
+fig = plt.figure(figsize=(20, 12))
+gs = GridSpec(3, 3, figure=fig, hspace=0.3, wspace=0.3)
+
+# Color palette
+colors = sns.color_palette("husl", 8)
+
+# 1. Main chart: Connections over time (spans full width)
+ax1 = fig.add_subplot(gs[0, :])
+ax1.plot(df['Date'], df['Connections'], linewidth=2, color='#2E86AB', marker='o', markersize=3)
+ax1.fill_between(df['Date'], df['Connections'], alpha=0.3, color='#2E86AB')
+ax1.set_title('Connection Count Over Time', fontsize=16, fontweight='bold', pad=10)
+ax1.set_ylabel('Connections', fontsize=12, fontweight='bold')
+ax1.grid(True, alpha=0.3)
+ax1.tick_params(axis='x', rotation=45)
+
+# 2. Volume metrics vs Connections
+ax2 = fig.add_subplot(gs[1, 0])
+ax2.scatter(df['Connections'], df['Input volume (MB)'], alpha=0.6, color=colors[0], s=50, edgecolors='black', linewidth=0.5)
+ax2.set_xlabel('Connections', fontsize=11, fontweight='bold')
+ax2.set_ylabel('Input Volume (MB)', fontsize=11, fontweight='bold')
+ax2.set_title('Input Volume vs Connections', fontsize=12, fontweight='bold')
+ax2.grid(True, alpha=0.3)
+
+# 3. Output rates vs Connections
+ax3 = fig.add_subplot(gs[1, 1])
+ax3.scatter(df['Connections'], df['GEMNI output rate (MB/s)'], alpha=0.6, color=colors[1], s=50, edgecolors='black', linewidth=0.5, label='GEMNI')
+ax3.scatter(df['Connections'], df['SMANPD output rate (MB/s)'], alpha=0.6, color=colors[2], s=50, edgecolors='black', linewidth=0.5, label='SMANPD')
+ax3.set_xlabel('Connections', fontsize=11, fontweight='bold')
+ax3.set_ylabel('Output Rate (MB/s)', fontsize=11, fontweight='bold')
+ax3.set_title('Output Rates vs Connections', fontsize=12, fontweight='bold')
+ax3.legend(loc='best', fontsize=9)
+ax3.grid(True, alpha=0.3)
+
+# 4. Memory usage vs Connections
+ax4 = fig.add_subplot(gs[1, 2])
+ax4.scatter(df['Connections'], df['Memory (used %)'], alpha=0.6, color=colors[3], s=50, edgecolors='black', linewidth=0.5)
+ax4.set_xlabel('Connections', fontsize=11, fontweight='bold')
+ax4.set_ylabel('Memory Used (%)', fontsize=11, fontweight='bold')
+ax4.set_title('Memory Usage vs Connections', fontsize=12, fontweight='bold')
+ax4.grid(True, alpha=0.3)
+
+# 5. CPU usage breakdown vs Connections
+ax5 = fig.add_subplot(gs[2, 0])
+ax5.scatter(df['Connections'], df['CPU (% used)'], alpha=0.6, color=colors[4], s=50, edgecolors='black', linewidth=0.5, label='Total CPU')
+ax5.scatter(df['Connections'], df['CPU (user %)'], alpha=0.5, color=colors[5], s=30, marker='^', label='User')
+ax5.scatter(df['Connections'], df['CPU (system %)'], alpha=0.5, color=colors[6], s=30, marker='s', label='System')
+ax5.set_xlabel('Connections', fontsize=11, fontweight='bold')
+ax5.set_ylabel('CPU Usage (%)', fontsize=11, fontweight='bold')
+ax5.set_title('CPU Usage vs Connections', fontsize=12, fontweight='bold')
+ax5.legend(loc='best', fontsize=9)
+ax5.grid(True, alpha=0.3)
+
+# 6. Events vs Connections
+ax6 = fig.add_subplot(gs[2, 1])
+ax6.scatter(df['Connections'], df['Out-of-sync events'], alpha=0.6, color=colors[7], s=50, edgecolors='black', linewidth=0.5, label='Out-of-sync')
+ax6.scatter(df['Connections'], df['Discarded events'], alpha=0.6, color='red', s=50, edgecolors='black', linewidth=0.5, label='Discarded')
+ax6.set_xlabel('Connections', fontsize=11, fontweight='bold')
+ax6.set_ylabel('Event Count', fontsize=11, fontweight='bold')
+ax6.set_title('Events vs Connections', fontsize=12, fontweight='bold')
+ax6.legend(loc='best', fontsize=9)
+ax6.grid(True, alpha=0.3)
+
+# 7. Disk usage vs Connections
+ax7 = fig.add_subplot(gs[2, 2])
+ax7.scatter(df['Connections'], df['Disk data0 (% used)'], alpha=0.6, color='#A23B72', s=50, edgecolors='black', linewidth=0.5)
+ax7.set_xlabel('Connections', fontsize=11, fontweight='bold')
+ax7.set_ylabel('Disk Used (%)', fontsize=11, fontweight='bold')
+ax7.set_title('Disk Usage vs Connections', fontsize=12, fontweight='bold')
+ax7.grid(True, alpha=0.3)
+
+# Overall title
+fig.suptitle(f'{SERVER_NAME} - System Performance Analysis: Connection Impact', fontsize=20, fontweight='bold', y=0.98)
+
+plt.tight_layout()
+plt.savefig(f'{SERVER_NAME}_connection_performance_dashboard.png', dpi=300, bbox_inches='tight')
+plt.show()
+
+# Optional: Create correlation heatmap
+plt.figure(figsize=(14, 10))
+correlation_cols = ['Connections', 'Input volume (MB)', 'GEMNI output rate (MB/s)', 
+                    'SMANPD output rate (MB/s)', 'Memory (used %)', 'CPU (% used)', 
+                    'Disk data0 (% used)']
+corr_matrix = df[correlation_cols].corr()
+sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='coolwarm', center=0, 
+            square=True, linewidths=1, cbar_kws={"shrink": 0.8})
+plt.title(f'{SERVER_NAME} - Correlation Matrix: Connection Count Impact', fontsize=16, fontweight='bold', pad=20)
+plt.tight_layout()
+plt.savefig(f'{SERVER_NAME}_correlation_heatmap.png', dpi=300, bbox_inches='tight')
+plt.show()
+
+# Print summary statistics
+print(f"\n=== {SERVER_NAME} - CORRELATION WITH CONNECTION COUNT ===")
+for col in correlation_cols[1:]:
+    corr = df['Connections'].corr(df[col])
+    print(f"{col}: {corr:.3f}")
