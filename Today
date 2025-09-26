@@ -1,8 +1,10 @@
 # Add a legend/guide box at the bottom of the figure
-fig.text(0.02, 0.01, '📖 QUICK GUIDE: Scatter plots show if metrics increase with more connections. ' +
-         'Dotted line = trend direction (upward=increases, flat=no change). ' +
-         'Correlation strength: 🔥Strong (close relationship), ➡️Moderate (some relationship), 〰️Weak (little relationship). ' +
-         'Heatmap colors: 🔵Blue=metrics move together, 🔴Red=metrics move opposite.',
+guide_text = ('QUICK GUIDE: Scatter plots show if metrics increase with more connections. '
+              'Dotted line = trend direction (upward=increases, flat=no change). '
+              'Correlation strength: Strong (close relationship), Moderate (some relationship), Weak (little relationship). '
+              'Heatmap colors: Blue=metrics move together, Red=metrics move opposite.')
+
+fig.text(0.02, 0.01, guide_text,
          fontsize=9, ha='left', va='bottom', style='normal', color='#222',
          bbox=dict(boxstyle='round,pad=0.6', facecolor='#fffef0', alpha=0.95, edgecolor='#2E86AB', linewidth=2))#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
