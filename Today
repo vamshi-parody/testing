@@ -13,102 +13,127 @@ SERVER_NAME = "PROD-SERVER-01"  # Change this to your server name
 # Read your CSV file
 df = pd.read_csv('your_data.csv')
 
-# Convert date to datetime if needed
-df['Date'] = pd.to_datetime(df['Date'])
+# Convert date to datetime - handle timezone properly
+df['Date'] = pd.to_datetime(df['Date'].str.replace(' CDT| CST| EST| PST| MST', '', regex=True))
 
-# Set style
+# Set style for beautiful graphs
 sns.set_style("whitegrid")
 plt.rcParams['figure.facecolor'] = 'white'
+plt.rcParams['axes.facecolor'] = '#f8f9fa'
+plt.rcParams['grid.alpha'] = 0.3
+plt.rcParams['font.family'] = 'sans-serif'
 
 # Create figure with custom layout
-fig = plt.figure(figsize=(20, 12))
-gs = GridSpec(3, 3, figure=fig, hspace=0.3, wspace=0.3)
+fig = plt.figure(figsize=(22, 13))
+gs = GridSpec(3, 3, figure=fig, hspace=0.35, wspace=0.35, top=0.94, bottom=0.06, left=0.06, right=0.96)
 
 # Color palette
 colors = sns.color_palette("husl", 8)
 
 # 1. Main chart: Connections over time (spans full width)
 ax1 = fig.add_subplot(gs[0, :])
-ax1.plot(df['Date'], df['Connections'], linewidth=2, color='#2E86AB', marker='o', markersize=3)
-ax1.fill_between(df['Date'], df['Connections'], alpha=0.3, color='#2E86AB')
-ax1.set_title('Connection Count Over Time', fontsize=16, fontweight='bold', pad=10)
-ax1.set_ylabel('Connections', fontsize=12, fontweight='bold')
-ax1.grid(True, alpha=0.3)
-ax1.tick_params(axis='x', rotation=45)
+ax1.plot(df['Date'], df['Connections'], linewidth=2.5, color='#2E86AB', marker='o', markersize=4)
+ax1.fill_between(df['Date'], df['Connections'], alpha=0.25, color='#2E86AB')
+ax1.set_title('Connection Count Over Time', fontsize=18, fontweight='bold', pad=15)
+ax1.set_ylabel('Connections', fontsize=13, fontweight='bold')
+ax1.grid(True, alpha=0.3, linestyle='--')
+ax1.tick_params(axis='x', rotation=45, labelsize=10)
+ax1.tick_params(axis='y', labelsize=10)
+ax1.spines['top'].set_visible(False)
+ax1.spines['right'].set_visible(False)
 
 # 2. Volume metrics vs Connections
 ax2 = fig.add_subplot(gs[1, 0])
-ax2.scatter(df['Connections'], df['Input volume (MB)'], alpha=0.6, color=colors[0], s=50, edgecolors='black', linewidth=0.5)
-ax2.set_xlabel('Connections', fontsize=11, fontweight='bold')
-ax2.set_ylabel('Input Volume (MB)', fontsize=11, fontweight='bold')
-ax2.set_title('Input Volume vs Connections', fontsize=12, fontweight='bold')
-ax2.grid(True, alpha=0.3)
+ax2.scatter(df['Connections'], df['Input volume (MB)'], alpha=0.7, color=colors[0], s=60, edgecolors='white', linewidth=1)
+ax2.set_xlabel('Connections', fontsize=12, fontweight='bold')
+ax2.set_ylabel('Input Volume (MB)', fontsize=12, fontweight='bold')
+ax2.set_title('Input Volume vs Connections', fontsize=14, fontweight='bold', pad=10)
+ax2.grid(True, alpha=0.3, linestyle='--')
+ax2.spines['top'].set_visible(False)
+ax2.spines['right'].set_visible(False)
 
 # 3. Output rates vs Connections
 ax3 = fig.add_subplot(gs[1, 1])
-ax3.scatter(df['Connections'], df['GEMNI output rate (MB/s)'], alpha=0.6, color=colors[1], s=50, edgecolors='black', linewidth=0.5, label='GEMNI')
-ax3.scatter(df['Connections'], df['SMANPD output rate (MB/s)'], alpha=0.6, color=colors[2], s=50, edgecolors='black', linewidth=0.5, label='SMANPD')
-ax3.set_xlabel('Connections', fontsize=11, fontweight='bold')
-ax3.set_ylabel('Output Rate (MB/s)', fontsize=11, fontweight='bold')
-ax3.set_title('Output Rates vs Connections', fontsize=12, fontweight='bold')
-ax3.legend(loc='best', fontsize=9)
-ax3.grid(True, alpha=0.3)
+ax3.scatter(df['Connections'], df['GEMNI output rate (MB/s)'], alpha=0.7, color=colors[1], s=60, edgecolors='white', linewidth=1, label='GEMNI')
+ax3.scatter(df['Connections'], df['SMANPD output rate (MB/s)'], alpha=0.7, color=colors[2], s=60, edgecolors='white', linewidth=1, label='SMANPD')
+ax3.set_xlabel('Connections', fontsize=12, fontweight='bold')
+ax3.set_ylabel('Output Rate (MB/s)', fontsize=12, fontweight='bold')
+ax3.set_title('Output Rates vs Connections', fontsize=14, fontweight='bold', pad=10)
+ax3.legend(loc='best', fontsize=10, frameon=True, shadow=True)
+ax3.grid(True, alpha=0.3, linestyle='--')
+ax3.spines['top'].set_visible(False)
+ax3.spines['right'].set_visible(False)
 
 # 4. Memory usage vs Connections
 ax4 = fig.add_subplot(gs[1, 2])
-ax4.scatter(df['Connections'], df['Memory (used %)'], alpha=0.6, color=colors[3], s=50, edgecolors='black', linewidth=0.5)
-ax4.set_xlabel('Connections', fontsize=11, fontweight='bold')
-ax4.set_ylabel('Memory Used (%)', fontsize=11, fontweight='bold')
-ax4.set_title('Memory Usage vs Connections', fontsize=12, fontweight='bold')
-ax4.grid(True, alpha=0.3)
+ax4.scatter(df['Connections'], df['Memory (used %)'], alpha=0.7, color=colors[3], s=60, edgecolors='white', linewidth=1)
+ax4.set_xlabel('Connections', fontsize=12, fontweight='bold')
+ax4.set_ylabel('Memory Used (%)', fontsize=12, fontweight='bold')
+ax4.set_title('Memory Usage vs Connections', fontsize=14, fontweight='bold', pad=10)
+ax4.grid(True, alpha=0.3, linestyle='--')
+ax4.spines['top'].set_visible(False)
+ax4.spines['right'].set_visible(False)
 
 # 5. CPU usage breakdown vs Connections
 ax5 = fig.add_subplot(gs[2, 0])
-ax5.scatter(df['Connections'], df['CPU (% used)'], alpha=0.6, color=colors[4], s=50, edgecolors='black', linewidth=0.5, label='Total CPU')
-ax5.scatter(df['Connections'], df['CPU (user %)'], alpha=0.5, color=colors[5], s=30, marker='^', label='User')
-ax5.scatter(df['Connections'], df['CPU (system %)'], alpha=0.5, color=colors[6], s=30, marker='s', label='System')
-ax5.set_xlabel('Connections', fontsize=11, fontweight='bold')
-ax5.set_ylabel('CPU Usage (%)', fontsize=11, fontweight='bold')
-ax5.set_title('CPU Usage vs Connections', fontsize=12, fontweight='bold')
-ax5.legend(loc='best', fontsize=9)
-ax5.grid(True, alpha=0.3)
+ax5.scatter(df['Connections'], df['CPU (% used)'], alpha=0.7, color=colors[4], s=60, edgecolors='white', linewidth=1, label='Total CPU')
+ax5.scatter(df['Connections'], df['CPU (user %)'], alpha=0.6, color=colors[5], s=40, marker='^', edgecolors='white', linewidth=1, label='User')
+ax5.scatter(df['Connections'], df['CPU (system %)'], alpha=0.6, color=colors[6], s=40, marker='s', edgecolors='white', linewidth=1, label='System')
+ax5.set_xlabel('Connections', fontsize=12, fontweight='bold')
+ax5.set_ylabel('CPU Usage (%)', fontsize=12, fontweight='bold')
+ax5.set_title('CPU Usage vs Connections', fontsize=14, fontweight='bold', pad=10)
+ax5.legend(loc='best', fontsize=10, frameon=True, shadow=True)
+ax5.grid(True, alpha=0.3, linestyle='--')
+ax5.spines['top'].set_visible(False)
+ax5.spines['right'].set_visible(False)
 
 # 6. Events vs Connections
 ax6 = fig.add_subplot(gs[2, 1])
-ax6.scatter(df['Connections'], df['Out-of-sync events'], alpha=0.6, color=colors[7], s=50, edgecolors='black', linewidth=0.5, label='Out-of-sync')
-ax6.scatter(df['Connections'], df['Discarded events'], alpha=0.6, color='red', s=50, edgecolors='black', linewidth=0.5, label='Discarded')
-ax6.set_xlabel('Connections', fontsize=11, fontweight='bold')
-ax6.set_ylabel('Event Count', fontsize=11, fontweight='bold')
-ax6.set_title('Events vs Connections', fontsize=12, fontweight='bold')
-ax6.legend(loc='best', fontsize=9)
-ax6.grid(True, alpha=0.3)
+ax6.scatter(df['Connections'], df['Out-of-sync events'], alpha=0.7, color=colors[7], s=60, edgecolors='white', linewidth=1, label='Out-of-sync')
+ax6.scatter(df['Connections'], df['Discarded events'], alpha=0.7, color='#E63946', s=60, edgecolors='white', linewidth=1, label='Discarded')
+ax6.set_xlabel('Connections', fontsize=12, fontweight='bold')
+ax6.set_ylabel('Event Count', fontsize=12, fontweight='bold')
+ax6.set_title('Events vs Connections', fontsize=14, fontweight='bold', pad=10)
+ax6.legend(loc='best', fontsize=10, frameon=True, shadow=True)
+ax6.grid(True, alpha=0.3, linestyle='--')
+ax6.spines['top'].set_visible(False)
+ax6.spines['right'].set_visible(False)
 
 # 7. Disk usage vs Connections
 ax7 = fig.add_subplot(gs[2, 2])
-ax7.scatter(df['Connections'], df['Disk data0 (% used)'], alpha=0.6, color='#A23B72', s=50, edgecolors='black', linewidth=0.5)
-ax7.set_xlabel('Connections', fontsize=11, fontweight='bold')
-ax7.set_ylabel('Disk Used (%)', fontsize=11, fontweight='bold')
-ax7.set_title('Disk Usage vs Connections', fontsize=12, fontweight='bold')
-ax7.grid(True, alpha=0.3)
+ax7.scatter(df['Connections'], df['Disk data0 (% used)'], alpha=0.7, color='#A23B72', s=60, edgecolors='white', linewidth=1)
+ax7.set_xlabel('Connections', fontsize=12, fontweight='bold')
+ax7.set_ylabel('Disk Used (%)', fontsize=12, fontweight='bold')
+ax7.set_title('Disk Usage vs Connections', fontsize=14, fontweight='bold', pad=10)
+ax7.grid(True, alpha=0.3, linestyle='--')
+ax7.spines['top'].set_visible(False)
+ax7.spines['right'].set_visible(False)
 
 # Overall title
-fig.suptitle(f'{SERVER_NAME} - System Performance Analysis: Connection Impact', fontsize=20, fontweight='bold', y=0.98)
+fig.suptitle(f'{SERVER_NAME} - System Performance Analysis: Connection Impact', fontsize=22, fontweight='bold', y=0.985)
 
-plt.tight_layout()
-plt.savefig(f'{SERVER_NAME}_connection_performance_dashboard.png', dpi=300, bbox_inches='tight')
+# Save figure
+import os
+output_file = os.path.join(os.getcwd(), f'{SERVER_NAME}.png')
+plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
+print(f"\n✓ Dashboard saved: {output_file}")
 plt.show()
 
 # Optional: Create correlation heatmap
-plt.figure(figsize=(14, 10))
+plt.figure(figsize=(15, 11))
 correlation_cols = ['Connections', 'Input volume (MB)', 'GEMNI output rate (MB/s)', 
                     'SMANPD output rate (MB/s)', 'Memory (used %)', 'CPU (% used)', 
                     'Disk data0 (% used)']
 corr_matrix = df[correlation_cols].corr()
-sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='coolwarm', center=0, 
-            square=True, linewidths=1, cbar_kws={"shrink": 0.8})
-plt.title(f'{SERVER_NAME} - Correlation Matrix: Connection Count Impact', fontsize=16, fontweight='bold', pad=20)
-plt.tight_layout()
-plt.savefig(f'{SERVER_NAME}_correlation_heatmap.png', dpi=300, bbox_inches='tight')
+sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='RdYlBu_r', center=0, 
+            square=True, linewidths=2, linecolor='white', cbar_kws={"shrink": 0.8},
+            annot_kws={'fontsize': 11, 'fontweight': 'bold'})
+plt.title(f'{SERVER_NAME} - Correlation Matrix: Connection Count Impact', fontsize=18, fontweight='bold', pad=20)
+
+# Save correlation heatmap
+output_file2 = os.path.join(os.getcwd(), f'{SERVER_NAME}_correlation.png')
+plt.savefig(output_file2, dpi=300, bbox_inches='tight', facecolor='white')
+print(f"✓ Heatmap saved: {output_file2}")
 plt.show()
 
 # Print summary statistics
