@@ -35,9 +35,9 @@ plt.rcParams['axes.facecolor'] = '#fafbfc'
 plt.rcParams['grid.alpha'] = 0.3
 plt.rcParams['font.family'] = 'sans-serif'
 
-# Create figure
-fig = plt.figure(figsize=(28, 18))
-gs = GridSpec(5, 5, figure=fig, hspace=0.4, wspace=0.35, top=0.93, bottom=0.06, left=0.04, right=0.98)
+# Create figure - EXPANDED to include legend panel
+fig = plt.figure(figsize=(28, 24))
+gs = GridSpec(7, 5, figure=fig, hspace=0.4, wspace=0.35, top=0.95, bottom=0.02, left=0.04, right=0.98)
 
 # Color palette
 colors = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#6A994E', 
@@ -330,17 +330,81 @@ ax_insights.text(0.05, 0.95, insights_text, transform=ax_insights.transAxes,
                          edgecolor='#2E86AB', linewidth=2, alpha=0.9))
 
 # Titles
-fig.suptitle(f'{SERVER_NAME}', fontsize=28, fontweight='bold', y=0.985, x=0.5, ha='center')
-subtitle = f"Performance Analysis | {df['Date'].min().strftime('%Y-%m-%d')} to {df['Date'].max().strftime('%Y-%m-%d')}"
-fig.text(0.5, 0.96, subtitle, fontsize=12, ha='center', color='#666')
+fig.suptitle(f'{SERVER_NAME} - PERFORMANCE DASHBOARD', fontsize=28, fontweight='bold', y=0.98, x=0.5, ha='center')
+subtitle = f"Executive Summary | {df['Date'].min().strftime('%Y-%m-%d')} to {df['Date'].max().strftime('%Y-%m-%d')} | Scroll down for detailed metric explanations"
+fig.text(0.5, 0.965, subtitle, fontsize=11, ha='center', color='#666', style='italic')
 
-# Guide at bottom
-guide_text = ('QUICK GUIDE: Scatter plots show if metrics increase with more connections. '
-              'Dotted line = trend direction (upward=increases, flat=no change). '
-              'Correlation strength: Strong (close relationship), Moderate (some relationship), Weak (little relationship). '
-              'Heatmap colors: Blue=metrics move together, Red=metrics move opposite.')
-fig.text(0.02, 0.01, guide_text, fontsize=9, ha='left', va='bottom', style='normal', color='#222',
-         bbox=dict(boxstyle='round,pad=0.6', facecolor='#fffef0', alpha=0.95, edgecolor='#2E86AB', linewidth=2))
+# Guide at bottom - COMPREHENSIVE LEGEND FOR NON-TECHNICAL READERS
+legend_box = fig.add_subplot(gs[5:, :])
+legend_box.axis('off')
+
+legend_content = """
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+📚 CHART GUIDE - What Each Metric Means (Plain Language)
+
+CONNECTION METRICS:
+  • Connections: Number of active users/sessions connected to the server at once. Higher = more traffic/load
+  • Connection Timeline: Shows how busy the server is over time. Peaks indicate high demand periods
+
+DATA FLOW METRICS:
+  • Input Volume (MB): Total amount of data the server receives. Like packages arriving at a warehouse
+  • Input Rate (MB/s): Speed of incoming data per second. Higher = faster data flow
+  • GEMNI Volume/Rate: Data processed by the GEMNI component (part of the system that handles specific tasks)
+  • SMANPD Volume/Rate: Data processed by the SMANPD component (another system component with different role)
+
+ERROR & QUALITY METRICS:
+  • Out-of-sync Events: Times when data failed to synchronize properly. Should be close to ZERO (0 = perfect)
+  • Discarded Events: Data packets rejected/lost due to errors or overload. Lower is better (0 = ideal)
+
+SYSTEM RESOURCES:
+  • CPU Usage (%): How hard the processor is working. Like engine RPM in a car. 80%+ means very busy
+  • CPU User (%): Processor power used by applications
+  • CPU System (%): Processor power used by the operating system itself
+  • Memory Used (GB): Amount of RAM being consumed. Like active workspace in use
+  • Memory Usage (%): Percentage of total available RAM in use. 50% = half full, 80%+ = getting full
+  • Memory Efficiency: RAM used per 1000 connections. Lower = more efficient
+  • Disk Usage (%): How full the storage drive is. Like hard drive space. 80%+ means nearly full
+
+UNDERSTANDING THE CHARTS:
+  📈 Scatter Plots: Each dot is one measurement. If dots go up-right, metric increases with more connections
+  📊 Trend Lines (dotted): Shows general direction. Upward = increases, flat = no change, downward = decreases
+  🎯 Correlation Values: Shows relationship strength
+      • "Strong" (0.7-1.0): Very closely related - one affects the other significantly
+      • "Moderate" (0.4-0.7): Somewhat related - some influence on each other
+      • "Weak" (0.0-0.4): Little relationship - mostly independent
+  🎨 Heatmap Colors: 
+      • BLUE = Metrics move together (both increase or both decrease)
+      • RED = Metrics move opposite (one up, other down)
+      • WHITE = No clear relationship
+
+KEY BUSINESS QUESTIONS THIS DASHBOARD ANSWERS:
+  ✓ Can our server handle more connections? (Look at CPU & Memory vs Connections)
+  ✓ Are we losing data under load? (Check Discarded Events)
+  ✓ Is performance degrading with traffic? (Check if rates stay steady or drop)
+  ✓ What's our bottleneck? (Find the metric with strongest correlation to connections)
+  ✓ Do we need more resources? (If CPU/Memory > 80% consistently = YES)
+
+WHAT TO WATCH FOR (RED FLAGS):
+  🚨 Discarded Events > 0: We're losing data - investigate immediately
+  🚨 CPU > 80%: Processor maxed out - performance will suffer
+  🚨 Memory > 80%: RAM nearly full - risk of crashes
+  🚨 Strong correlation + high values: This metric is our limiting factor
+
+WHAT GOOD LOOKS LIKE:
+  ✅ Discarded Events = 0: No data loss
+  ✅ CPU < 70%: Healthy headroom for growth
+  ✅ Memory < 70%: Adequate resources
+  ✅ Rates increase linearly: System scales well
+  ✅ Weak correlation on errors: Stable under any load
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+"""
+
+legend_box.text(0.5, 0.5, legend_content, transform=legend_box.transAxes,
+                fontsize=9, ha='center', va='center', fontfamily='monospace',
+                bbox=dict(boxstyle='round,pad=1.2', facecolor='#f9f9f9', 
+                         edgecolor='#2E86AB', linewidth=3, alpha=0.98))
 
 # Save and exit
 output_file = os.path.join(os.getcwd(), f'{SERVER_NAME}.png')
